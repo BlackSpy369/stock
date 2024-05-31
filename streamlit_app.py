@@ -7,7 +7,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 import altair as alt
 import time
 import yfinance as yf
-from utils import preprocess_data
+from utils.utils import preprocess_data
 
 # Page title
 st.set_page_config(page_title='Stock Price Predictor', page_icon='📈')
