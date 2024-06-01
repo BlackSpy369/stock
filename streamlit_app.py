@@ -7,7 +7,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 import altair as alt
 import time
 import yfinance as yf
-from utils.utils import preprocess_data
+from utils.utils import preprocess_data,predict_stock
 
 # Page title
 st.set_page_config(page_title='Stock Price Predictor', page_icon='📈')
@@ -45,6 +45,7 @@ with st.sidebar:
     # ticker=st.selectbox(label="Choose a Stock",options=[" ","META"] ,format_func=lambda x: 'Select an option' if x == '' else x)
     ticker = st.text_input(
         "Enter Yahoo Finance Stock Ticker code", placeholder="e.g. META")
+    
     standarize = st.toggle(label="Standarize Data")
     if ticker:
         data_loader = yf.Ticker(ticker)
@@ -93,146 +94,154 @@ if ticker:
 # Initiate the model building process
 
     if metric != " ":
-        if uploaded_file or ticker:
-            with st.status("Running ...", expanded=True) as status:
-                st.write("Loading data ...")
-                time.sleep(sleep_time)
-
-                st.write("Preparing data ...")
-                time.sleep(sleep_time)
-                X, y = preprocess_data(df[metric].values, n_length,standarize)
-
-                st.write("Splitting data ...")
-                time.sleep(sleep_time)
-
-                if standarize:
-                    st.write("Standarizing Data...")
+        if st.button("Fit Model"):
+            if uploaded_file or ticker:
+                with st.status("Running ...", expanded=True) as status:
+                    st.write("Loading data ...")
                     time.sleep(sleep_time)
 
-                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=(
-                    100-parameter_split_size)/100, random_state=parameter_random_state)
+                    st.write("Preparing data ...")
+                    time.sleep(sleep_time)
+                    X, y = preprocess_data(df[metric].values, n_length,standarize)
 
-                st.write("Model training ...")
-                time.sleep(sleep_time)
+                    st.write("Splitting data ...")
+                    time.sleep(sleep_time)
 
-                if parameter_max_features == 'all':
-                    parameter_max_features = None
-                    parameter_max_features_metric = X.shape[1]
+                    if standarize:
+                        st.write("Standarizing Data...")
+                        time.sleep(sleep_time)
 
-                rf = RandomForestRegressor(
-                    n_estimators=parameter_n_estimators,
-                    max_features=parameter_max_features,
-                    min_samples_split=parameter_min_samples_split,
-                    min_samples_leaf=parameter_min_samples_leaf,
-                    random_state=parameter_random_state,
-                    criterion=parameter_criterion,
-                    bootstrap=parameter_bootstrap,
-                    oob_score=parameter_oob_score)
-                rf.fit(X_train, y_train)
+                    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=(
+                        100-parameter_split_size)/100, random_state=parameter_random_state)
 
-                st.write("Applying model to make predictions ...")
-                time.sleep(sleep_time)
-                y_train_pred = rf.predict(X_train)
-                y_test_pred = rf.predict(X_test)
+                    st.write("Model training ...")
+                    time.sleep(sleep_time)
 
-                st.write("Evaluating performance metrics ...")
-                time.sleep(sleep_time)
-                train_mse = mean_squared_error(y_train, y_train_pred)
-                train_r2 = r2_score(y_train, y_train_pred)
-                test_mse = mean_squared_error(y_test, y_test_pred)
-                test_r2 = r2_score(y_test, y_test_pred)
+                    if parameter_max_features == 'all':
+                        parameter_max_features = None
+                        parameter_max_features_metric = X.shape[1]
 
-                st.write("Displaying performance metrics ...")
-                time.sleep(sleep_time)
-                performance_dict = {
-                    "Train MSE": train_mse, "Train R2": train_r2, "Test MSE": test_mse, "Test R2": test_r2}
-                performance_df = pd.DataFrame(performance_dict, index=range(1))
+                    rf = RandomForestRegressor(
+                        n_estimators=parameter_n_estimators,
+                        max_features=parameter_max_features,
+                        min_samples_split=parameter_min_samples_split,
+                        min_samples_leaf=parameter_min_samples_leaf,
+                        random_state=parameter_random_state,
+                        criterion=parameter_criterion,
+                        bootstrap=parameter_bootstrap,
+                        oob_score=parameter_oob_score)
+                    rf.fit(X_train, y_train)
 
-            status.update(label="Status", state="complete", expanded=True)
+                    st.write("Applying model to make predictions ...")
+                    time.sleep(sleep_time)
+                    y_train_pred = rf.predict(X_train)
+                    y_test_pred = rf.predict(X_test)
 
-            # Display data info
-            st.header('Input data', divider='rainbow')
-            col = st.columns(4)
-            col[0].metric(label="No. of samples", value=X.shape[0], delta="")
-            col[1].metric(label="No. of X variables",
-                          value=X.shape[1], delta="")
-            col[2].metric(label="No. of Training samples",
-                          value=X_train.shape[0], delta="")
-            col[3].metric(label="No. of Test samples",
-                          value=X_test.shape[0], delta="")
+                    st.write("Evaluating performance metrics ...")
+                    time.sleep(sleep_time)
+                    train_mse = mean_squared_error(y_train, y_train_pred)
+                    train_r2 = r2_score(y_train, y_train_pred)
+                    test_mse = mean_squared_error(y_test, y_test_pred)
+                    test_r2 = r2_score(y_test, y_test_pred)
 
-            with st.expander('Initial dataset', expanded=True):
-                st.dataframe(df, height=210, use_container_width=True)
-            with st.expander('Train split', expanded=False):
-                train_col = st.columns((3, 1))
-                with train_col[0]:
-                    st.markdown('**X**')
-                    st.dataframe(X_train, height=210,
-                                 hide_index=True, use_container_width=True)
-                with train_col[1]:
-                    st.markdown('**y**')
-                    st.dataframe(y_train, height=210,
-                                 hide_index=True, use_container_width=True)
-            with st.expander('Test split', expanded=False):
-                test_col = st.columns((3, 1))
-                with test_col[0]:
-                    st.markdown('**X**')
-                    st.dataframe(X_test, height=210,
-                                 hide_index=True, use_container_width=True)
-                with test_col[1]:
-                    st.markdown('**y**')
-                    st.dataframe(y_test, height=210,
-                                 hide_index=True, use_container_width=True)
+                    st.write("Displaying performance metrics ...")
+                    time.sleep(sleep_time)
+                    performance_dict = {
+                        "Train MSE": train_mse, "Train R2": train_r2, "Test MSE": test_mse, "Test R2": test_r2}
+                    performance_df = pd.DataFrame(performance_dict, index=range(1))
 
-            # Display model parameters
-            st.header('Model parameters', divider='rainbow')
-            parameters_col = st.columns(3)
-            parameters_col[0].metric(
-                label="Data split ratio (% for Training Set)", value=parameter_split_size, delta="")
-            parameters_col[1].metric(
-                label="Number of estimators (n_estimators)", value=parameter_n_estimators, delta="")
-            parameters_col[2].metric(
-                label="Max features (max_features)", value=parameter_max_features_metric, delta="")
+                    st.write("Predicting tomorrow Stock...")
+                    time.sleep(sleep_time)
+                    y_pred = predict_stock(X[-1], rf, standarize)
 
-            # Prediction results
-            st.header('Prediction results', divider='rainbow')
-            s_y_train = pd.Series(
-                y_train, name='actual').reset_index(drop=True)
-            s_y_train_pred = pd.Series(
-                y_train_pred, name='predicted').reset_index(drop=True)
-            df_train = pd.DataFrame(
-                data=[s_y_train, s_y_train_pred], index=None).T
-            df_train['class'] = 'train'
+                status.update(label="Status", state="complete", expanded=True)
 
-            s_y_test = pd.Series(y_test, name='actual').reset_index(drop=True)
-            s_y_test_pred = pd.Series(
-                y_test_pred, name='predicted').reset_index(drop=True)
-            df_test = pd.DataFrame(
-                data=[s_y_test, s_y_test_pred], index=None).T
-            df_test['class'] = 'test'
+                # Display data info
+                st.header('Input data', divider='rainbow')
+                col = st.columns(4)
+                col[0].metric(label="No. of samples", value=X.shape[0], delta="")
+                col[1].metric(label="No. of X variables",
+                            value=X.shape[1], delta="")
+                col[2].metric(label="No. of Training samples",
+                            value=X_train.shape[0], delta="")
+                col[3].metric(label="No. of Test samples",
+                            value=X_test.shape[0], delta="")
 
-            df_prediction = pd.concat([df_train, df_test], axis=0)
+                with st.expander('Initial dataset', expanded=True):
+                    st.dataframe(df, height=210, use_container_width=True)
+                with st.expander('Train split', expanded=False):
+                    train_col = st.columns((3, 1))
+                    with train_col[0]:
+                        st.markdown('**X**')
+                        st.dataframe(X_train, height=210,
+                                    hide_index=True, use_container_width=True)
+                    with train_col[1]:
+                        st.markdown('**y**')
+                        st.dataframe(y_train, height=210,
+                                    hide_index=True, use_container_width=True)
+                with st.expander('Test split', expanded=False):
+                    test_col = st.columns((3, 1))
+                    with test_col[0]:
+                        st.markdown('**X**')
+                        st.dataframe(X_test, height=210,
+                                    hide_index=True, use_container_width=True)
+                    with test_col[1]:
+                        st.markdown('**y**')
+                        st.dataframe(y_test, height=210,
+                                    hide_index=True, use_container_width=True)
 
-            prediction_col = st.columns((2, 0.2, 3))
+                # Display model parameters
+                st.header('Model parameters', divider='rainbow')
+                parameters_col = st.columns(3)
+                parameters_col[0].metric(
+                    label="Data split ratio (% for Training Set)", value=parameter_split_size, delta="")
+                parameters_col[1].metric(
+                    label="Number of estimators (n_estimators)", value=parameter_n_estimators, delta="")
+                parameters_col[2].metric(
+                    label="Max features (max_features)", value=parameter_max_features_metric, delta="")
 
-            # Display dataframe
-            with prediction_col[0]:
-                st.dataframe(df_prediction, height=320,
-                             use_container_width=True)
+                # Prediction results
+                st.header('Prediction results', divider='rainbow')
+                s_y_train = pd.Series(
+                    y_train, name='actual').reset_index(drop=True)
+                s_y_train_pred = pd.Series(
+                    y_train_pred, name='predicted').reset_index(drop=True)
+                df_train = pd.DataFrame(
+                    data=[s_y_train, s_y_train_pred], index=None).T
+                df_train['class'] = 'train'
 
-            # Display scatter plot of actual vs predicted values
-            with prediction_col[2]:
-                scatter = alt.Chart(df_prediction).mark_circle(size=60).encode(
-                    x='actual',
-                    y='predicted',
-                    color='class'
-                )
-                st.altair_chart(scatter, theme='streamlit',
+                s_y_test = pd.Series(y_test, name='actual').reset_index(drop=True)
+                s_y_test_pred = pd.Series(
+                    y_test_pred, name='predicted').reset_index(drop=True)
+                df_test = pd.DataFrame(
+                    data=[s_y_test, s_y_test_pred], index=None).T
+                df_test['class'] = 'test'
+
+                df_prediction = pd.concat([df_train, df_test], axis=0)
+
+                prediction_col = st.columns((2, 0.2, 3))
+
+                # Display dataframe
+                with prediction_col[0]:
+                    st.dataframe(df_prediction, height=320,
                                 use_container_width=True)
 
-            #Displaying Performance Table
-            st.table(performance_df)
-            st.info("Your Model's **Performance** can be increase or decrease by tuning ***hyperparameters*** (see **sidebar**).")
+                # Display scatter plot of actual vs predicted values
+                with prediction_col[2]:
+                    scatter = alt.Chart(df_prediction).mark_circle(size=60).encode(
+                        x='actual',
+                        y='predicted',
+                        color='class'
+                    )
+                    st.altair_chart(scatter, theme='streamlit',
+                                    use_container_width=True)
+
+                #Displaying Performance Table
+                st.table(performance_df)
+                st.info("Your Model's **Performance** can be increase or decrease by tuning ***hyperparameters*** (see **sidebar**).")
+
+                st.write(f"Prediction of {ticker} Stock for Metric {metric} for tomorrow is: **{y_pred[0]}**")
+
 # Ask for CSV upload if none is detected
 else:
     st.warning(
