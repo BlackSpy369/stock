@@ -16,7 +16,16 @@ def preprocess_data(data:np.ndarray,n_length:int,standarize:bool=False):
     return np.array(X),np.array(y)
 
 
-def predict_stock(X:np.ndarray,model,standarize:bool=False):
-    if standarize:
-        return scalar.inverse_transform(model.predict(np.expand_dims(X,axis=0)).reshape(-1,1))[0]
-    return model.predict(np.expand_dims(X,axis=0))
+def predict_stock(X:np.ndarray,model,n:int,standarize:bool=False):
+    X=X.copy()
+
+    for i in range(n):
+        if standarize:
+            X=np.append(X,scalar.inverse_transform(model.predict(np.expand_dims(X,axis=0)).reshape(-1,1))[0])
+        else:
+            X=np.append(X,model.predict(np.expand_dims(X,axis=0)))
+        # print(X)
+        X=np.delete(X,0)
+        # print(f"-- {X}")
+
+    return X

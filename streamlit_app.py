@@ -8,14 +8,22 @@ import altair as alt
 import time
 import yfinance as yf
 from utils.utils import preprocess_data,predict_stock
+import matplotlib.pyplot as plt
 
 # Page title
 st.set_page_config(page_title='Stock Price Predictor', page_icon='📈')
 st.title('📈 Stock Price Predictor')
 
+if "n" not in st.session_state:
+    st.session_state["n"]=5
+
+if "run_model" not in st.session_state:
+    st.session_state["run_model"]=True
+
+
 with st.expander('About this app',expanded=False):
     st.markdown('**What can this app do?**')
-    st.info('This App can predict Stock Price using ML (Random Forest Regressor and other models)')
+    st.info('This App can predict Stock Price using ML (Random Forest Regressor and other models). It uses basic time-series forecasting (just for learning purpose).')
 
     st.markdown('**How to use the app?**')
     st.warning('To engage with the app, go to the sidebar and 1. Select TICKER symbol and n_length and 2. Adjust the model parameters by adjusting the various slider widgets. As a result, this would initiate the ML model building process, display the model results as well as allowing users to download the generated models and accompanying data.')
@@ -26,29 +34,22 @@ with st.expander('About this app',expanded=False):
 - Altair for chart creation
 - Streamlit for user interface
 - Yahoo finance for Stock data
-  ''', language='markdown')
+''', language='markdown')
 
 # Sidebar for accepting input parameters
 with st.sidebar:
     # Load data
-    st.header('1.1. Input data')
-
-    st.markdown('**1. Use custom data**')
-    st.warning("Your File should be a csv file and should contain columns such as Open,Close,Volume etc, else do not use custom data")
-    uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
-    if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file, index_col=False)
-        
-
+    st.header('1. Input data')
     # Select example data
-    st.markdown('**1.2. Use Yahoo Finance data**')
+    st.markdown('**1.1 Use Yahoo Finance data**')
     # ticker=st.selectbox(label="Choose a Stock",options=[" ","META"] ,format_func=lambda x: 'Select an option' if x == '' else x)
-    ticker = st.text_input(
+    st.session_state.ticker = st.text_input(
         "Enter Yahoo Finance Stock Ticker code", placeholder="e.g. META")
     
     standarize = st.toggle(label="Standarize Data")
-    if ticker:
-        data_loader = yf.Ticker(ticker)
+    shuffle=st.toggle(label="Shuffle Data",value=True)
+    if st.session_state.ticker:
+        data_loader = yf.Ticker(st.session_state.ticker)
         df = pd.DataFrame(data_loader.history(period="max"))
 
     st.header('2. Set Parameters')
@@ -60,7 +61,7 @@ with st.sidebar:
     with st.expander('See parameters'):
         parameter_n_estimators = st.slider(
             'Number of estimators (n_estimators)', 0, 1000, 100, 100)
-        parameter_max_features = st.select_slider(
+        st.session_state.parameter_max_features = st.select_slider(
             'Max features (max_features)', options=['all', 'sqrt', 'log2'])
         parameter_min_samples_split = st.slider(
             'Minimum number of samples required to split an internal node (min_samples_split)', 2, 10, 2, 1)
@@ -72,7 +73,7 @@ with st.sidebar:
         parameter_random_state = st.slider(
             'Seed number (random_state)', 0, 1000, 42, 1)
         parameter_criterion = st.select_slider('Performance measure (criterion)', options=[
-                                               'squared_error', 'absolute_error', 'friedman_mse'])
+                                            'squared_error', 'absolute_error', 'friedman_mse'])
         parameter_bootstrap = st.select_slider(
             'Bootstrap samples when building trees (bootstrap)', options=[True, False])
         parameter_oob_score = st.select_slider(
@@ -80,22 +81,26 @@ with st.sidebar:
 
     sleep_time = st.slider('Sleep time', 0, 3, 0)
 
-if ticker == "":
-    st.warning(
-        "Please select a Stock to get Started, either load your own data or use inbuild datasets of stocks.")
+@st.cache_resource
+def plot_graph(X,_model,standarize,n):
+    with st.container():
+        st.header("Predict for future")
+        y_pred=predict_stock(X[-1],_model,n,standarize)
+        print(y_pred)
+        fig, ax = plt.subplots()
+        ax.plot(range(1,n+1),y_pred[-n:], label=f'Prediction for {n} days')
 
-if ticker:
-    metric = st.selectbox('Select a Metric:', df.columns.insert(
-        0, " "), format_func=lambda x: 'Select an option' if x == '' else x)
+        # Customize the plot
+        ax.set_title("Stock Prediction")
+        ax.set_xlabel("Next days")
+        ax.set_ylabel("Price Prediction")
+        st.pyplot(fig)
 
-    if metric == " ":
-        st.warning("Select a Metric to get started")
+        with st.expander(label="Show Predicted Table",expanded=False) as results:
+             st.table(pd.Series(y_pred[-n:],index=range(1,n+1)))
 
-# Initiate the model building process
-
-    if metric != " ":
-        if st.button("Fit Model"):
-            if uploaded_file or ticker:
+@st.cache_resource
+def preprocess_and_fit_model(*args):
                 with st.status("Running ...", expanded=True) as status:
                     st.write("Loading data ...")
                     time.sleep(sleep_time)
@@ -112,18 +117,18 @@ if ticker:
                         time.sleep(sleep_time)
 
                     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=(
-                        100-parameter_split_size)/100, random_state=parameter_random_state)
+                        100-parameter_split_size)/100, random_state=parameter_random_state,shuffle=shuffle)
 
                     st.write("Model training ...")
                     time.sleep(sleep_time)
 
-                    if parameter_max_features == 'all':
-                        parameter_max_features = None
+                    if st.session_state.parameter_max_features == 'all':
+                        st.session_state.parameter_max_features = None
                         parameter_max_features_metric = X.shape[1]
 
                     rf = RandomForestRegressor(
                         n_estimators=parameter_n_estimators,
-                        max_features=parameter_max_features,
+                        max_features=st.session_state.parameter_max_features,
                         min_samples_split=parameter_min_samples_split,
                         min_samples_leaf=parameter_min_samples_leaf,
                         random_state=parameter_random_state,
@@ -150,11 +155,12 @@ if ticker:
                         "Train MSE": train_mse, "Train R2": train_r2, "Test MSE": test_mse, "Test R2": test_r2}
                     performance_df = pd.DataFrame(performance_dict, index=range(1))
 
-                    st.write("Predicting tomorrow Stock...")
+                    st.write(f"Predicting Stock Prices...")
                     time.sleep(sleep_time)
-                    y_pred = predict_stock(X[-1], rf, standarize)
+                    st.write("Plotting Graphs...")
+                    time.sleep(sleep_time)
 
-                status.update(label="Status", state="complete", expanded=True)
+                status.update(label="Done...", state="complete", expanded=True)
 
                 # Display data info
                 st.header('Input data', divider='rainbow')
@@ -239,9 +245,28 @@ if ticker:
                 #Displaying Performance Table
                 st.table(performance_df)
                 st.info("Your Model's **Performance** can be increase or decrease by tuning ***hyperparameters*** (see **sidebar**).")
+                return X,rf,standarize
+if st.session_state.ticker == "":
+    st.warning(
+        "Please select a Stock to get Started, either load your own data or use inbuild datasets of stocks.")
 
-                st.write(f"Prediction of {ticker} Stock for Metric {metric} for tomorrow is: **{y_pred[0]}**")
+if st.session_state.ticker:
+    metric = st.selectbox('Select a Metric:', df.columns.insert(
+        0, " "), format_func=lambda x: 'Select an option' if x == '' else x)
 
+    if metric == " ":
+        st.warning("Select a Metric to get started")
+
+# Initiate the model building process
+
+    if metric != " ":
+            if st.session_state.ticker:
+                X,model,standarize=preprocess_and_fit_model(
+                     st.session_state.ticker,parameter_min_samples_leaf,parameter_min_samples_split,parameter_n_estimators,st.session_state.parameter_max_features,n_length,standarize,shuffle
+                    )
+                st.session_state.n=st.number_input(label="No. of Days",min_value=2,max_value=n_length,value=10,step=1,on_change=plot_graph,kwargs=dict(X=X,_model=model,standarize=standarize,n=st.session_state.n))
+                plot_graph(X,model,standarize,st.session_state.n)
+                     
 # Ask for CSV upload if none is detected
 else:
     st.warning(
